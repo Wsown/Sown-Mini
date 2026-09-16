@@ -186,17 +186,10 @@ async def check_tiktok():
 
 # Cấu hình yt-dlp để chỉ lấy âm thanh, chất lượng tốt nhất
 ydl_opts = {
-
-
     'format': 'bestaudio/best',
-
-
     'noplaylist': True,
-
-
     'cookiefile': 'cookies.txt',
-
-
+    'extractor_args': {'youtube': ['client=android']},
 }
 
 # Cấu hình FFmpeg để stream mượt mà, tự động kết nối lại nếu mạng lag
