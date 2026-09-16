@@ -195,8 +195,6 @@ ffmpeg_options = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn' # -vn nghĩa là "no video" (chỉ lấy âm thanh)
 }
-
-@bot.command()
 @bot.command()
 async def batnhacchoanh(ctx, url: str):
     # 1. Kiểm tra xem người dùng đã vào phòng thoại chưa
