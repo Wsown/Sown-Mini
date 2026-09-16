@@ -11,6 +11,7 @@ from threading import Thread
 import yt_dlp
 import asyncio
 import imageio_ffmpeg
+import sys
 # --- CÀI ĐẶT WEB SERVER CHỐNG NGỦ ĐÔNG ---
 app = Flask(__name__)
 
@@ -287,7 +288,7 @@ async def batnhacchoanh(ctx, *, query: str):
             voice_client.stop() 
 
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-        player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, **ffmpeg_opts) 
+        player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, stderr=sys.stderr, **ffmpeg_opts)
         
         # Bẫy lỗi ngầm
         def check_error(error):
