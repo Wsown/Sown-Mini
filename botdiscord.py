@@ -9,6 +9,7 @@ from flask import Flask
 from threading import Thread
 import yt_dlp
 import asyncio
+import imageio_ffmpeg2
 # --- CÀI ĐẶT WEB SERVER CHỐNG NGỦ ĐÔNG ---
 app = Flask(__name__)
 
@@ -228,7 +229,10 @@ async def batnhacchoanh(ctx, url: str):
             voice_client.stop() # Dừng bài cũ nếu đang phát
 
         # Dùng FFmpeg để truyền âm thanh vào Discord
-        player = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
+        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+
+
+        player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, **ffmpeg_options)
         voice_client.play(player)
         
         await ctx.send(f"▶️ Đang phát: **{title}**")
