@@ -196,7 +196,7 @@ ffmpeg_options = {
 }
 
 @bot.command()
-async def play(ctx, url: str):
+async def batnhacchoanh(ctx, url: str):
     # 1. Kiểm tra xem người dùng đã vào phòng thoại (Voice Channel) chưa
     if not ctx.author.voice:
         await ctx.send("❌ Bạn phải vào một kênh thoại (Voice Channel) trước đã!")
