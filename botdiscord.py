@@ -5,6 +5,21 @@ import os
 from datetime import datetime, timezone, timedelta, time
 import aiohttp
 import xml.etree.ElementTree as ET
+from flask import Flask
+from threading import Thread
+# --- CÀI ĐẶT WEB SERVER CHỐNG NGỦ ĐÔNG ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot Discord dang hoat dong 24/7!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -82,7 +97,6 @@ async def check_birthdays():
             # Bỏ qua nếu dữ liệu bị lỗi định dạng
             pass
 
-bot.run(os.getenv('DISCORD_TOKEN')) # Đừng quên thay Token của bạn
 # --- TÍNH NĂNG THEO DÕI YOUTUBE ---
 last_video_id = None 
 
@@ -164,3 +178,6 @@ async def check_tiktok():
                             await channel.send(f"🎵 **CÓ TIKTOK MỚI NÈ:** {video_title}\n{video_url}")
     except Exception as e:
         print(f"Lỗi khi check TikTok: {e}")
+# --- KHỞI ĐỘNG WEB SERVER VÀ BOT ---
+keep_alive()
+bot.run(os.getenv('DISCORD_TOKEN'))
