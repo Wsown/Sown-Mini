@@ -3,3 +3,4 @@ aiohttp
 Flask
 yt_dlp
 asyncio
+imageio-ffmpeg
