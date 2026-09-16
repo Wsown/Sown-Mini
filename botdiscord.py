@@ -189,7 +189,9 @@ ydl_opts = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'cookiefile': 'cookies.txt',
-    'extractor_args': {'youtube': ['client=android']},
+    'extractor_args': {
+        'youtube': ['player_client=tv,mweb']
+    }
 }
 
 # Cấu hình FFmpeg để stream mượt mà, tự động kết nối lại nếu mạng lag
