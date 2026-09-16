@@ -218,7 +218,7 @@ async def batnhacchoanh(ctx, *, query: str):
         await ctx.send(f"❌ Không kết nối được kênh thoại: {e}")
         return
 
-    await ctx.send(f"🔍 Đang tìm kiếm `{query}` trên SoundCloud... Vui lòng đợi nhé!")
+    await ctx.send(f"🔍 Đang tìm kiếm `{query}` trên SoundCloud...")
 
     search_opts = {
         'format': 'bestaudio/best',
@@ -267,42 +267,58 @@ async def batnhacchoanh(ctx, *, query: str):
         await ctx.send(f"❌ Có lỗi khi tìm kiếm: {e}")
         return
 
-    await ctx.send(f"⏳ Đang tải bài **{selected_title}**...")
+    await ctx.send(f"⏳ Đang kéo bài **{selected_title}** về máy chủ (siêu tốc)...")
 
-    # BẮT ĐẦU PHÁT NHẠC
+    # BẮT ĐẦU TẢI VÀ PHÁT NHẠC TỪ FILE CỨNG
     try:
+        # Dọn dẹp các file nhạc cũ (nếu có) để không bị đầy bộ nhớ
+        for file in glob.glob("song_*.*"):
+            try:
+                os.remove(file)
+            except:
+                pass
+                
+        # Cấu hình tải thẳng file về ổ cứng máy chủ
+        file_name_template = f"song_{ctx.message.id}.%(ext)s"
         play_opts = {
             'format': 'bestaudio/best',
+            'outtmpl': file_name_template,
             'noplaylist': True,
         }
-        track_data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(play_opts).extract_info(selected_url, download=False))
-        audio_url = track_data['url']
         
-        # Chống đứt mạng cực mạnh
-        ffmpeg_opts = {
-            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-            'options': '-vn'
-        }
+        # Tiến hành tải nhạc
+        await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(play_opts).download([selected_url]))
+        
+        # Tìm file vừa tải xong
+        downloaded_files = glob.glob(f"song_{ctx.message.id}.*")
+        if not downloaded_files:
+            await ctx.send("❌ Tải nhạc thất bại, không tìm thấy file!")
+            return
+            
+        audio_file = downloaded_files[0]
         
         if voice_client.is_playing():
             voice_client.stop() 
 
+        # Phát nhạc trực tiếp từ ổ cứng (CHỐNG SẬP NGẦM 100%)
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-        player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, stderr=sys.stderr, **ffmpeg_opts)
+        player = discord.FFmpegPCMAudio(audio_file, executable=ffmpeg_path) 
         
-        # Bẫy lỗi ngầm
         def check_error(error):
             if error:
-                print(f"🚨 LỖI FFMPEG SẬP NGẦM: {error}")
-            else:
-                print("✅ Bài hát đã kết thúc bình thường.")
+                print(f"🚨 LỖI FFMPEG: {error}")
+            try:
+                # Xóa dọn rác file nhạc ngay sau khi hát xong
+                os.remove(audio_file) 
+            except:
+                pass
 
         voice_client.play(player, after=check_error)
         
-        await ctx.send(f"▶️ Chúc bạn nghe nhạc vui vẻ! Đang phát: **{selected_title}**")
+        await ctx.send(f"▶️ Bắt đầu phát: **{selected_title}** 🎧 (Đường truyền cục bộ mượt mà 100%)")
 
     except Exception as e:
-        await ctx.send(f"❌ Có lỗi khi phát nhạc: {e}")
+        await ctx.send(f"❌ Có lỗi khi xử lý âm thanh: {e}")
 
 # Lệnh đuổi bot ra khỏi phòng thoại
 @bot.command()
