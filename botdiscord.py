@@ -200,49 +200,100 @@ ffmpeg_options = {
     'options': '-vn' # -vn nghĩa là "no video" (chỉ lấy âm thanh)
 }
 @bot.command()
-async def batnhacchoanh(ctx, url: str):
-    # 1. Kiểm tra phòng
+async def batnhacchoanh(ctx, *, query: str): 
+    # Lưu ý chữ *, query: str giúp bot đọc được nguyên câu dài (có dấu cách)
+    
     if not ctx.author.voice:
         await ctx.send("❌ Bạn phải vào một kênh thoại trước đã!")
         return
-    
+        
     voice_channel = ctx.author.voice.channel
-    await ctx.send("🕵️ 1. Đã thấy bạn trong phòng, chuẩn bị mở cửa chui vào...")
-
-    # 2. Rải máy quay ở khu vực hay kẹt nhất
+    
     try:
         voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
         if not voice_client:
-            await ctx.send("🕵️ 2. Đang vặn tay nắm cửa (Nếu bot im lặng sau câu này thì chắc chắn lỗi mạng Render!)...")
-            
-            # Ép bot chỉ được cố gắng trong 10 giây, nếu không được phải báo lỗi ngay!
             voice_client = await voice_channel.connect(timeout=10.0, reconnect=False)
-            
-            await ctx.send("🕵️ 3. Phù! Đã chui vào phòng thành công!")
         elif voice_client.channel != voice_channel:
             await voice_client.move_to(voice_channel)
     except Exception as e:
-        await ctx.send(f"❌ Kẹt cửa rồi! Lỗi chính xác là: {e}")
+        await ctx.send(f"❌ Không kết nối được kênh thoại: {e}")
         return
 
-    await ctx.send(f"⏳ Đang xử lý link YouTube... Vui lòng đợi nhé!")
+    await ctx.send(f"🔍 Đang tìm kiếm `{query}` trên SoundCloud... Vui lòng đợi nhé!")
 
-    # 3. Lấy dữ liệu và phát nhạc
+    # 1. CẤU HÌNH TÌM KIẾM 5 BÀI
+    search_opts = {
+        'format': 'bestaudio/best',
+        'noplaylist': True,
+        'extract_flat': True, # Chỉ lấy danh sách tên bài, không tải âm thanh vội cho nhẹ
+    }
+    
     try:
         loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(url, download=False))
+        # Tìm 5 bài hát trên SoundCloud (scsearch5:)
+        data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(search_opts).extract_info(f"scsearch5:{query}", download=False))
         
-        audio_url = data['url'] 
-        title = data.get('title', 'Bài hát không tên')
+        if 'entries' not in data or not data['entries']:
+            await ctx.send("❌ Không tìm thấy bài nào trên SoundCloud!")
+            return
+            
+        entries = data['entries']
+        
+        # 2. IN MENU LỰA CHỌN RA MÀN HÌNH
+        menu = "**🎵 Tôi tìm thấy các bản này, bạn muốn nghe bản nào? (Gõ số từ 1 đến 5):**\n"
+        for i, entry in enumerate(entries):
+            title = entry.get('title', 'Không tên')
+            uploader = entry.get('uploader', 'Ẩn danh')
+            menu += f"`{i+1}.` {title} - *({uploader})*\n"
+            
+        await ctx.send(menu)
+        
+        # 3. CHỜ BẠN GÕ SỐ (Cho thời gian 30 giây)
+        def check(m):
+            # Kiểm tra xem tin nhắn có phải do bạn gõ không, ở đúng kênh chat không, và có phải là số không
+            return m.author == ctx.author and m.channel == ctx.channel and m.content.isdigit()
+            
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=30.0)
+            choice = int(msg.content)
+            
+            if choice < 1 or choice > len(entries):
+                await ctx.send("❌ Số không hợp lệ, lệnh đã bị hủy. Hãy gõ lệnh lại nhé!")
+                return
+                
+            # Lấy thông tin bài mà bạn vừa chọn
+            selected_entry = entries[choice - 1]
+            selected_url = selected_entry.get('url')
+            selected_title = selected_entry.get('title')
+            
+        except asyncio.TimeoutError:
+            await ctx.send("⏳ Quá 30 giây không thấy bạn chọn, tôi đi ngủ đây!")
+            return
+            
+    except Exception as e:
+        await ctx.send(f"❌ Có lỗi khi tìm kiếm: {e}")
+        return
 
+    await ctx.send(f"⏳ Đang tải bài **{selected_title}**...")
+
+    # 4. BẮT ĐẦU PHÁT NHẠC
+    try:
+        play_opts = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+        }
+        # Tải link âm thanh gốc của bài đã chọn
+        track_data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(play_opts).extract_info(selected_url, download=False))
+        audio_url = track_data['url']
+        
         if voice_client.is_playing():
             voice_client.stop() 
 
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-        player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, **ffmpeg_options)
+        player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, **ffmpeg_options) 
         voice_client.play(player)
         
-        await ctx.send(f"▶️ Đang phát: **{title}**")
+        await ctx.send(f"▶️ Chúc bạn nghe nhạc vui vẻ! Đang phát: **{selected_title}**")
 
     except Exception as e:
         await ctx.send(f"❌ Có lỗi khi phát nhạc: {e}")
