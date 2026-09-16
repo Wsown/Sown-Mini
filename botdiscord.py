@@ -7,6 +7,8 @@ import aiohttp
 import xml.etree.ElementTree as ET
 from flask import Flask
 from threading import Thread
+import yt_dlp
+import asyncio
 # --- CÀI ĐẶT WEB SERVER CHỐNG NGỦ ĐÔNG ---
 app = Flask(__name__)
 
@@ -178,6 +180,71 @@ async def check_tiktok():
                             await channel.send(f"🎵 **CÓ TIKTOK MỚI NÈ:** {video_title}\n{video_url}")
     except Exception as e:
         print(f"Lỗi khi check TikTok: {e}")
+# --- TÍNH NĂNG PHÁT NHẠC ---
+
+# Cấu hình yt-dlp để chỉ lấy âm thanh, chất lượng tốt nhất
+ydl_opts = {
+    'format': 'bestaudio/best',
+    'noplaylist': True,
+    'quiet': True,
+}
+
+# Cấu hình FFmpeg để stream mượt mà, tự động kết nối lại nếu mạng lag
+ffmpeg_options = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn' # -vn nghĩa là "no video" (chỉ lấy âm thanh)
+}
+
+@bot.command()
+async def play(ctx, url: str):
+    # 1. Kiểm tra xem người dùng đã vào phòng thoại (Voice Channel) chưa
+    if not ctx.author.voice:
+        await ctx.send("❌ Bạn phải vào một kênh thoại (Voice Channel) trước đã!")
+        return
+
+    voice_channel = ctx.author.voice.channel
+
+    # 2. Bot tham gia vào phòng thoại
+    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    if not voice_client:
+        voice_client = await voice_channel.connect()
+    elif voice_client.channel != voice_channel:
+        await voice_client.move_to(voice_channel)
+
+    await ctx.send(f"⏳ Đang xử lý link YouTube... Vui lòng đợi nhé!")
+
+    # 3. Lấy dữ liệu âm thanh từ YouTube
+    try:
+        # Chạy yt-dlp trong nền để không làm đơ bot
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(url, download=False))
+        
+        # Lấy đường link chứa luồng âm thanh gốc
+        audio_url = data['url'] 
+        title = data.get('title', 'Bài hát không tên')
+
+        # 4. Phát nhạc
+        if voice_client.is_playing():
+            voice_client.stop() # Dừng bài cũ nếu đang phát
+
+        # Dùng FFmpeg để truyền âm thanh vào Discord
+        player = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
+        voice_client.play(player)
+        
+        await ctx.send(f"▶️ Đang phát: **{title}**")
+
+    except Exception as e:
+        await ctx.send(f"❌ Có lỗi xảy ra khi phát nhạc: {e}")
+
+# Lệnh đuổi bot ra khỏi phòng thoại
+@bot.command()
+async def stop(ctx):
+    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    if voice_client and voice_client.is_connected():
+        await voice_client.disconnect()
+        await ctx.send("👋 Bot đã tắt nhạc và rời phòng thoại!")
+    else:
+        await ctx.send("Bot đang không ở trong phòng thoại nào cả.")
 # --- KHỞI ĐỘNG WEB SERVER VÀ BOT ---
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
