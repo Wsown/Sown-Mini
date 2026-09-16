@@ -201,23 +201,20 @@ ffmpeg_options = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn' # -vn nghĩa là "no video" (chỉ lấy âm thanh)
 }
-# ----------------- HỆ THỐNG DANH SÁCH CHỜ (QUEUE) -----------------
-# 1. Tạo "Giỏ hàng" lưu nhạc cho từng server
+# ----------------- HỆ THỐNG QUEUE VÀ ĐIỀU KHIỂN NHẠC -----------------
 music_queues = {}
 
-# 2. Hàm tự động chuyển bài (Bộ não của Queue)
 async def play_next(ctx):
     guild_id = ctx.guild.id
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
 
-    # Kiểm tra xem giỏ hàng còn bài nào không
     if guild_id in music_queues and len(music_queues[guild_id]) > 0:
-        song = music_queues[guild_id].pop(0) # Rút bài đầu tiên ra
+        song = music_queues[guild_id].pop(0)
         selected_url = song['url']
         selected_title = song['title']
-        msg_id = song['message_id'] # Mã riêng để không bị trùng tên file
+        msg_id = song['message_id']
 
-        await ctx.send(f"⏳ Đang kéo bài **{selected_title}** về...")
+        await ctx.send(f"⏳ Đang chuẩn bị bài **{selected_title}**...")
 
         try:
             loop = asyncio.get_event_loop()
@@ -228,7 +225,6 @@ async def play_next(ctx):
                 'noplaylist': True,
             }
 
-            # Tải nhạc bằng luồng ngầm (không làm đơ bot)
             await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(play_opts).download([selected_url]))
 
             downloaded_files = glob.glob(f"song_{msg_id}.*")
@@ -241,15 +237,22 @@ async def play_next(ctx):
             
             player = discord.FFmpegPCMAudio(audio_file, executable=ffmpeg_path, stderr=sys.stderr)
 
-            # Máy nghe lén: Báo lỗi, dọn rác và chuyển bài
+            # Hàm dọn rác trễ 1 phút ở nền (vẫn giữ file trong 1 phút để phòng hờ)
+            async def delayed_cleanup_and_next(file_path):
+                await asyncio.sleep(60) # Chờ 60 giây
+                try:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        print(f"🗑️ Đã tự động dọn rác file sau 1 phút: {file_path}")
+                except Exception as e:
+                    print(f"⚠️ Lỗi dọn rác ngầm: {e}")
+
             def check_error(error):
                 if error:
                     print(f"🚨 LỖI FFMPEG: {error}")
-                try:
-                    os.remove(audio_file) # Dọn sạch rác đúng cái file vừa hát xong
-                except:
-                    pass
-                # GỌI LẠI HÀM NÀY ĐỂ KÍCH HOẠT BÀI TIẾP THEO
+                
+                # Kích hoạt tiến trình đếm ngược 1 phút xóa file và chạy bài tiếp theo ở nền
+                asyncio.run_coroutine_threadsafe(delayed_cleanup_and_next(audio_file), bot.loop)
                 asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
 
             voice_client.play(player, after=check_error)
@@ -257,12 +260,12 @@ async def play_next(ctx):
 
         except Exception as e:
             await ctx.send(f"❌ Có lỗi khi tải bài này: {e}")
-            await play_next(ctx) # Lỗi thì bỏ qua, tự next bài
+            await play_next(ctx)
     else:
-        await ctx.send("✅ Đã phát hết nhạc trong hàng đợi! Trả lại sự tĩnh lặng.")
+        await ctx.send("✅ Hàng đợi đã trống! Tạm biệt các bạn.")
 
 
-# ----------------- LỆNH TÌM VÀ ĐẶT NHẠC -----------------
+# ----------------- LỆNH TÌM VÀ THÊM VÀO QUEUE -----------------
 @bot.command()
 async def batnhacchoanh(ctx, *, query: str): 
     if not ctx.author.voice:
@@ -329,34 +332,49 @@ async def batnhacchoanh(ctx, *, query: str):
         await ctx.send(f"❌ Có lỗi khi tìm kiếm: {e}")
         return
 
-    # -------- NHÉT VÀO GIỎ HÀNG --------
     guild_id = ctx.guild.id
     if guild_id not in music_queues:
-        music_queues[guild_id] = [] # Khởi tạo giỏ nếu chưa có
+        music_queues[guild_id] = []
         
     song_info = {
         'title': selected_title,
         'url': selected_url,
-        'message_id': ctx.message.id # Lấy mã chat để làm tên file không bị trùng
+        'message_id': ctx.message.id
     }
     
-    music_queues[guild_id].append(song_info) # Bỏ bài hát vào giỏ
+    music_queues[guild_id].append(song_info)
 
-    # Nếu bot đang hát, chỉ báo xếp hàng. Nếu bot đang rảnh, gọi hàm lấy bài ra hát!
     if voice_client.is_playing():
         await ctx.send(f"✅ Đã thêm vào hàng đợi: **{selected_title}** (Vị trí thứ {len(music_queues[guild_id])})")
     else:
         await play_next(ctx)
 
-# Lệnh đuổi bot ra khỏi phòng thoại
+
+# ----------------- LỆNH SKIP (BỎ QUA BÀI HIỆN TẠI) -----------------
+@bot.command()
+async def skip(ctx):
+    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    if voice_client and voice_client.is_playing():
+        voice_client.stop() # Dừng bài hiện tại, tự động chuyển sang bài kế tiếp
+        await ctx.send("⏭️ Đã bỏ qua bài hiện tại!")
+    else:
+        await ctx.send("❌ Hiện tại bot có đang phát bài nào đâu mà skip!")
+
+
+# ----------------- LỆNH STOP (ĐUỔI BOT RA KHỎI PHÒNG) -----------------
 @bot.command()
 async def stop(ctx):
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    guild_id = ctx.guild.id
+    
+    # Xóa sạch hàng đợi của server này khi stop hẳn
+    if guild_id in music_queues:
+        music_queues[guild_id].clear()
+        
     if voice_client and voice_client.is_connected():
         await voice_client.disconnect()
-        await ctx.send("👋 Bot đã tắt nhạc và rời phòng thoại!")
+        await ctx.send("👋 Bot đã dừng nhạc, xóa hàng đợi và rời phòng thoại!")
     else:
         await ctx.send("Bot đang không ở trong phòng thoại nào cả.")
-# --- KHỞI ĐỘNG WEB SERVER VÀ BOT ---
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
