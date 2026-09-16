@@ -197,23 +197,27 @@ ffmpeg_options = {
 }
 @bot.command()
 async def batnhacchoanh(ctx, url: str):
-    # 1. Kiểm tra xem người dùng đã vào phòng thoại chưa
+    # 1. Kiểm tra phòng thoại
     if not ctx.author.voice:
         await ctx.send("❌ Bạn phải vào một kênh thoại (Voice Channel) trước đã!")
         return
 
     voice_channel = ctx.author.voice.channel
 
-    # 2. Bot tham gia vào phòng thoại
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    if not voice_client:
-        voice_client = await voice_channel.connect()
-    elif voice_client.channel != voice_channel:
-        await voice_client.move_to(voice_channel)
+    # 2. ÉP BOT BÁO CÁO LỖI KHI KẾT NỐI
+    try:
+        voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+        if not voice_client:
+            voice_client = await voice_channel.connect()
+        elif voice_client.channel != voice_channel:
+            await voice_client.move_to(voice_channel)
+    except Exception as e:
+        await ctx.send(f"❌ Ối, tôi không chui vào phòng được! Lỗi là: {e}")
+        return
 
     await ctx.send(f"⏳ Đang xử lý link YouTube... Vui lòng đợi nhé!")
 
-    # 3. Lấy dữ liệu âm thanh từ YouTube
+    # 3. Lấy dữ liệu âm thanh
     try:
         loop = asyncio.get_event_loop()
         data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(url, download=False))
@@ -225,7 +229,6 @@ async def batnhacchoanh(ctx, url: str):
         if voice_client.is_playing():
             voice_client.stop() 
 
-        # Tự động lấy FFmpeg được tích hợp sẵn trên máy chủ Render
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
         player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, **ffmpeg_options)
         voice_client.play(player)
