@@ -286,17 +286,30 @@ async def batnhacchoanh(ctx, *, query: str):
         track_data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(play_opts).extract_info(selected_url, download=False))
         audio_url = track_data['url']
         
+        # 4. BẮT ĐẦU PHÁT NHẠC (ĐÃ FIX LỖI HÁT NHÉP)
+        
+        # Cấu hình chống đứt mạng cực mạnh cho FFmpeg
+        ffmpeg_opts = {
+            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+            'options': '-vn'
+        }
+        
         if voice_client.is_playing():
             voice_client.stop() 
 
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-        player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, **ffmpeg_options) 
-        voice_client.play(player)
+        player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, **ffmpeg_opts) 
+        
+        # Gài máy nghe lén lỗi ngầm in ra bảng Log Render
+        def check_error(error):
+            if error:
+                print(f"🚨 LỖI FFMPEG SẬP NGẦM: {error}")
+            else:
+                print("✅ Bài hát đã kết thúc bình thường.")
+
+        voice_client.play(player, after=check_error)
         
         await ctx.send(f"▶️ Chúc bạn nghe nhạc vui vẻ! Đang phát: **{selected_title}**")
-
-    except Exception as e:
-        await ctx.send(f"❌ Có lỗi khi phát nhạc: {e}")
 
 # Lệnh đuổi bot ra khỏi phòng thoại
 @bot.command()
