@@ -201,8 +201,6 @@ ffmpeg_options = {
 }
 @bot.command()
 async def batnhacchoanh(ctx, *, query: str): 
-    # Lưu ý chữ *, query: str giúp bot đọc được nguyên câu dài (có dấu cách)
-    
     if not ctx.author.voice:
         await ctx.send("❌ Bạn phải vào một kênh thoại trước đã!")
         return
@@ -221,16 +219,14 @@ async def batnhacchoanh(ctx, *, query: str):
 
     await ctx.send(f"🔍 Đang tìm kiếm `{query}` trên SoundCloud... Vui lòng đợi nhé!")
 
-    # 1. CẤU HÌNH TÌM KIẾM 5 BÀI
     search_opts = {
         'format': 'bestaudio/best',
         'noplaylist': True,
-        'extract_flat': True, # Chỉ lấy danh sách tên bài, không tải âm thanh vội cho nhẹ
+        'extract_flat': True, 
     }
     
     try:
         loop = asyncio.get_event_loop()
-        # Tìm 5 bài hát trên SoundCloud (scsearch5:)
         data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(search_opts).extract_info(f"scsearch5:{query}", download=False))
         
         if 'entries' not in data or not data['entries']:
@@ -239,7 +235,6 @@ async def batnhacchoanh(ctx, *, query: str):
             
         entries = data['entries']
         
-        # 2. IN MENU LỰA CHỌN RA MÀN HÌNH
         menu = "**🎵 Tôi tìm thấy các bản này, bạn muốn nghe bản nào? (Gõ số từ 1 đến 5):**\n"
         for i, entry in enumerate(entries):
             title = entry.get('title', 'Không tên')
@@ -248,9 +243,7 @@ async def batnhacchoanh(ctx, *, query: str):
             
         await ctx.send(menu)
         
-        # 3. CHỜ BẠN GÕ SỐ (Cho thời gian 30 giây)
         def check(m):
-            # Kiểm tra xem tin nhắn có phải do bạn gõ không, ở đúng kênh chat không, và có phải là số không
             return m.author == ctx.author and m.channel == ctx.channel and m.content.isdigit()
             
         try:
@@ -258,10 +251,9 @@ async def batnhacchoanh(ctx, *, query: str):
             choice = int(msg.content)
             
             if choice < 1 or choice > len(entries):
-                await ctx.send("❌ Số không hợp lệ, lệnh đã bị hủy. Hãy gõ lệnh lại nhé!")
+                await ctx.send("❌ Số không hợp lệ, lệnh đã bị hủy.")
                 return
                 
-            # Lấy thông tin bài mà bạn vừa chọn
             selected_entry = entries[choice - 1]
             selected_url = selected_entry.get('url')
             selected_title = selected_entry.get('title')
@@ -276,19 +268,16 @@ async def batnhacchoanh(ctx, *, query: str):
 
     await ctx.send(f"⏳ Đang tải bài **{selected_title}**...")
 
-    # 4. BẮT ĐẦU PHÁT NHẠC
+    # BẮT ĐẦU PHÁT NHẠC
     try:
         play_opts = {
             'format': 'bestaudio/best',
             'noplaylist': True,
         }
-        # Tải link âm thanh gốc của bài đã chọn
         track_data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(play_opts).extract_info(selected_url, download=False))
         audio_url = track_data['url']
         
-        # 4. BẮT ĐẦU PHÁT NHẠC (ĐÃ FIX LỖI HÁT NHÉP)
-        
-        # Cấu hình chống đứt mạng cực mạnh cho FFmpeg
+        # Chống đứt mạng cực mạnh
         ffmpeg_opts = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn'
@@ -300,7 +289,7 @@ async def batnhacchoanh(ctx, *, query: str):
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
         player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, **ffmpeg_opts) 
         
-        # Gài máy nghe lén lỗi ngầm in ra bảng Log Render
+        # Bẫy lỗi ngầm
         def check_error(error):
             if error:
                 print(f"🚨 LỖI FFMPEG SẬP NGẦM: {error}")
@@ -310,6 +299,9 @@ async def batnhacchoanh(ctx, *, query: str):
         voice_client.play(player, after=check_error)
         
         await ctx.send(f"▶️ Chúc bạn nghe nhạc vui vẻ! Đang phát: **{selected_title}**")
+
+    except Exception as e:
+        await ctx.send(f"❌ Có lỗi khi phát nhạc: {e}")
 
 # Lệnh đuổi bot ra khỏi phòng thoại
 @bot.command()
