@@ -188,7 +188,7 @@ async def check_tiktok():
 ydl_opts = {
     'format': 'bestaudio/best',
     'noplaylist': True,
-    'extractor_args': {'youtube': ['player_client=android']},
+    'cookiefile': 'cookies.txt',
 }
 
 # Cấu hình FFmpeg để stream mượt mà, tự động kết nối lại nếu mạng lag
