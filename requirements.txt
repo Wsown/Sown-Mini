@@ -5,3 +5,4 @@ yt_dlp
 asyncio
 imageio-ffmpeg
 PyNaCl
+discord.py[voice]
