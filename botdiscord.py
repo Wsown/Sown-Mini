@@ -9,7 +9,7 @@ from flask import Flask
 from threading import Thread
 import yt_dlp
 import asyncio
-import imageio_ffmpeg2
+import imageio_ffmpeg
 # --- CÀI ĐẶT WEB SERVER CHỐNG NGỦ ĐÔNG ---
 app = Flask(__name__)
 
