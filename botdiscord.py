@@ -197,8 +197,9 @@ ffmpeg_options = {
 }
 
 @bot.command()
+@bot.command()
 async def batnhacchoanh(ctx, url: str):
-    # 1. Kiểm tra xem người dùng đã vào phòng thoại (Voice Channel) chưa
+    # 1. Kiểm tra xem người dùng đã vào phòng thoại chưa
     if not ctx.author.voice:
         await ctx.send("❌ Bạn phải vào một kênh thoại (Voice Channel) trước đã!")
         return
@@ -216,22 +217,18 @@ async def batnhacchoanh(ctx, url: str):
 
     # 3. Lấy dữ liệu âm thanh từ YouTube
     try:
-        # Chạy yt-dlp trong nền để không làm đơ bot
         loop = asyncio.get_event_loop()
         data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(url, download=False))
         
-        # Lấy đường link chứa luồng âm thanh gốc
         audio_url = data['url'] 
         title = data.get('title', 'Bài hát không tên')
 
         # 4. Phát nhạc
         if voice_client.is_playing():
-            voice_client.stop() # Dừng bài cũ nếu đang phát
+            voice_client.stop() 
 
-        # Dùng FFmpeg để truyền âm thanh vào Discord
+        # Tự động lấy FFmpeg được tích hợp sẵn trên máy chủ Render
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-
-
         player = discord.FFmpegPCMAudio(audio_url, executable=ffmpeg_path, **ffmpeg_options)
         voice_client.play(player)
         
