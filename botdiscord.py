@@ -197,27 +197,33 @@ ffmpeg_options = {
 }
 @bot.command()
 async def batnhacchoanh(ctx, url: str):
-    # 1. Kiểm tra phòng thoại
+    # 1. Kiểm tra phòng
     if not ctx.author.voice:
-        await ctx.send("❌ Bạn phải vào một kênh thoại (Voice Channel) trước đã!")
+        await ctx.send("❌ Bạn phải vào một kênh thoại trước đã!")
         return
-
+    
     voice_channel = ctx.author.voice.channel
+    await ctx.send("🕵️ 1. Đã thấy bạn trong phòng, chuẩn bị mở cửa chui vào...")
 
-    # 2. ÉP BOT BÁO CÁO LỖI KHI KẾT NỐI
+    # 2. Rải máy quay ở khu vực hay kẹt nhất
     try:
         voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
         if not voice_client:
-            voice_client = await voice_channel.connect()
+            await ctx.send("🕵️ 2. Đang vặn tay nắm cửa (Nếu bot im lặng sau câu này thì chắc chắn lỗi mạng Render!)...")
+            
+            # Ép bot chỉ được cố gắng trong 10 giây, nếu không được phải báo lỗi ngay!
+            voice_client = await voice_channel.connect(timeout=10.0, reconnect=False)
+            
+            await ctx.send("🕵️ 3. Phù! Đã chui vào phòng thành công!")
         elif voice_client.channel != voice_channel:
             await voice_client.move_to(voice_channel)
     except Exception as e:
-        await ctx.send(f"❌ Ối, tôi không chui vào phòng được! Lỗi là: {e}")
+        await ctx.send(f"❌ Kẹt cửa rồi! Lỗi chính xác là: {e}")
         return
 
     await ctx.send(f"⏳ Đang xử lý link YouTube... Vui lòng đợi nhé!")
 
-    # 3. Lấy dữ liệu âm thanh
+    # 3. Lấy dữ liệu và phát nhạc
     try:
         loop = asyncio.get_event_loop()
         data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(url, download=False))
@@ -225,7 +231,6 @@ async def batnhacchoanh(ctx, url: str):
         audio_url = data['url'] 
         title = data.get('title', 'Bài hát không tên')
 
-        # 4. Phát nhạc
         if voice_client.is_playing():
             voice_client.stop() 
 
@@ -236,7 +241,7 @@ async def batnhacchoanh(ctx, url: str):
         await ctx.send(f"▶️ Đang phát: **{title}**")
 
     except Exception as e:
-        await ctx.send(f"❌ Có lỗi xảy ra khi phát nhạc: {e}")
+        await ctx.send(f"❌ Có lỗi khi phát nhạc: {e}")
 
 # Lệnh đuổi bot ra khỏi phòng thoại
 @bot.command()
