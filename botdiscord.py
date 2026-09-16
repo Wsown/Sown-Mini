@@ -1,8 +1,8 @@
 import discord
+import nacl
 from discord.ext import commands, tasks
 import json
 import os
-os.system("pip install PyNaCl discord.py[voice]")
 from datetime import datetime, timezone, timedelta, time
 import aiohttp
 import xml.etree.ElementTree as ET
