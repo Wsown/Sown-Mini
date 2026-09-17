@@ -6,3 +6,4 @@ asyncio
 imageio-ffmpeg
 PyNaCl
 discord.py[voice]
+gTTS
