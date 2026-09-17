@@ -392,58 +392,7 @@ async def stop(ctx):
         await ctx.send("Bot đang không ở trong phòng thoại nào cả.")
 
 
-# ----------------- HỆ THỐNG MENU CHỌN GIỌNG AI (UI) -----------------
-class VoiceSelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="Nam - Miền Bắc", description="Giọng Lê Minh (Chuẩn VTV)", emoji="👦", value="nam_bac"),
-            discord.SelectOption(label="Nữ - Miền Bắc", description="Giọng Ban Mai (Trong trẻo)", emoji="👧", value="nu_bac"),
-            discord.SelectOption(label="Nam - Miền Trung", description="Giọng Nam (Trầm ấm)", emoji="👨", value="nam_trung"),
-            discord.SelectOption(label="Nữ - Miền Trung", description="Giọng Mỹ An (Nhẹ nhàng)", emoji="👩", value="nu_trung"),
-            discord.SelectOption(label="Nam - Miền Nam", description="Giọng Minh Quang (Nam tính)", emoji="👱‍♂️", value="nam_nambo"),
-            discord.SelectOption(label="Nữ - Miền Nam", description="Giọng Lan Nhi (Ngọt ngào)", emoji="👱‍♀️", value="nu_nambo"),
-        ]
-        super().__init__(placeholder="👆 Nhấp vào đây để chọn giọng đọc...", min_values=1, max_values=1, options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        # Lấy giá trị user vừa click
-        choice = self.values[0]
-        gender, region = choice.split('_')
-        
-        # Xử lý riêng cái tên cho miền nam
-        if region == "nambo": 
-            region = "nam_bo"
-
-        # Ghi nhớ vào file bộ nhớ của Bot
-        settings = load_voice_settings()
-        user_id = str(interaction.user.id)
-        
-        if user_id not in settings or not isinstance(settings[user_id], dict):
-            settings[user_id] = {}
-            
-        settings[user_id]['gender'] = gender
-        settings[user_id]['region'] = region
-        save_voice_settings(settings)
-
-        # Phản hồi bí mật (chỉ người bấm mới nhìn thấy chữ xác nhận)
-        region_name = "Miền Bắc" if region == 'bac' else ("Miền Trung" if region == 'trung' else "Miền Nam")
-        gender_name = "Nam" if gender == 'nam' else "Nữ"
-        
-        await interaction.response.send_message(f"✅ Đã lưu cấu hình! Từ giờ tôi sẽ đọc cho bạn bằng giọng: **{gender_name} - {region_name}**", ephemeral=True)
-
-class VoiceView(discord.ui.View):
-    def __init__(self):
-        super().__init__()
-        self.add_item(VoiceSelect())
-
-# ----------------- LỆNH GỌI BẢNG CHỌN RA -----------------
-@bot.command()
-async def setvoice(ctx):
-    view = VoiceView()
-    await ctx.send("🎙️ **BẢNG CÀI ĐẶT GIỌNG ĐỌC AI CÁ NHÂN**\nHãy click vào menu thả xuống bên dưới để chọn giọng bạn thích nhé:", view=view)
-
-
-# ----------------- LỆNH ĐỌC VĂN BẢN (FPT.AI CAO CẤP) -----------------
+# ----------------- LỆNH ĐỌC VĂN BẢN (GIỌNG GOOGLE CƠ BẢN - MIỄN PHÍ 100%) -----------------
 @bot.command()
 async def ngheanhbaonay(ctx, *, text: str):
     if not ctx.author.voice:
@@ -466,76 +415,21 @@ async def ngheanhbaonay(ctx, *, text: str):
         await ctx.send("❌ Dài vl, viết ngắn thôi dài quá anh đéo đọc đâu")
         return
 
-    # 1. TRA CỨU CẤU HÌNH NGƯỜI DÙNG
-    settings = load_voice_settings()
-    user_pref = settings.get(str(ctx.author.id), {'gender': 'nam', 'region': 'bac'})
-    
-    gender = user_pref['gender']
-    region = user_pref['region']
-    
-    # 2. BẢN ĐỒ MAP VỚI CÁC GIỌNG ĐỌC CỦA FPT.AI
-    voice_map = {
-        'bac_nam': 'leminh',       # Lê Minh (Nam - Bắc)
-        'bac_nu': 'banmai',        # Ban Mai (Nữ - Bắc)
-        'nam_bo_nam': 'minhquang', # Minh Quang (Nam - Nam Bộ)
-        'nam_nam': 'minhquang',    
-        'nam_bo_nu': 'lannhi',     # Lan Nhi (Nữ - Nam Bộ)
-        'nam_nu': 'lannhi',        
-        'trung_nu': 'myan',        # Mỹ An (Nữ - Miền Trung)
-        'trung_nam': 'leminh'      # FPT hạn chế Nam Miền Trung ở bản miễn phí, lấy tạm Lê Minh
-    }
-    
-    dict_key = f"{region}_{gender}"
-    fpt_voice = voice_map.get(dict_key, 'banmai')
-    
-    gender_txt = "Nam" if gender == 'nam' else "Nữ"
-    region_txt = "Miền Bắc" if region == 'bac' else ("Miền Trung" if region == 'trung' else "Miền Nam")
-    
-    status_msg = await ctx.send(f"🎙️ Đợi tí anh đổi giọng **{gender_txt} {region_txt}**...")
+    status_msg = await ctx.send("🎙️ Đang dịch giọng chị Google...")
 
-    # 3. GỬI YÊU CẦU LÊN FPT.AI
     try:
+        # Chạy gTTS ở luồng ngầm để bot không bị đơ
         loop = asyncio.get_event_loop()
+        speech_file = f"tts_{ctx.message.id}.mp3"
         
-        def call_fpt_api():
-            url = 'https://api.fpt.ai/hmi/tts/v5'
-            headers = {
-                'api-key': FPT_API_KEY,
-                'voice': fpt_voice,
-                'speed': ''
-            }
-            response = requests.post(url, data=text.encode('utf-8'), headers=headers)
-            res_data = response.json()
+        def create_google_tts():
+            from gtts import gTTS
+            tts = gTTS(text=text, lang='vi', slow=False)
+            tts.save(speech_file)
             
-            if res_data.get('error') == 0:
-                audio_url = res_data.get('async')
-                import time
-                speech_file = f"tts_{ctx.message.id}.mp3"
-                
-                for _ in range(15):
-                    time.sleep(1) 
-                    audio_res = requests.get(audio_url)
-                    if audio_res.status_code == 200:
-                        with open(speech_file, 'wb') as f:
-                            f.write(audio_res.content)
-                            
-                        if os.path.getsize(speech_file) > 1000:
-                            return speech_file
-                return "TIMEOUT"
-            else:
-                return f"ERROR:{res_data.get('message')}"
+        await loop.run_in_executor(None, create_google_tts)
 
-        result = await loop.run_in_executor(None, call_fpt_api)
-
-        if result == "TIMEOUT":
-            await status_msg.edit(content="❌ Bọn FPT ngâm file lâu quá 15 giây, tui hủy lệnh rồi!")
-            return
-        elif result.startswith("ERROR:"):
-            await status_msg.edit(content=f"❌ Lỗi API từ FPT: {result}")
-            return
-            
-        speech_file = result
-
+        # Dọn đường phát nhạc
         if voice_client.is_playing():
             voice_client.stop()
 
@@ -552,11 +446,10 @@ async def ngheanhbaonay(ctx, *, text: str):
                 pass
 
         voice_client.play(player, after=cleanup_speech)
-        await status_msg.edit(content="▶️ Bot đang đọc văn bản của bạn trong kênh thoại rồi đó!")
+        await status_msg.edit(content="▶️ Chị Google đang đọc trong kênh thoại rồi đó!")
 
     except Exception as e:
-        await status_msg.edit(content=f"❌ Có lỗi mạng: {e}")
-
+        await status_msg.edit(content=f"❌ Có lỗi khi tạo giọng Google: {e}")
 # --- KHỞI ĐỘNG WEB SERVER VÀ BOT ---
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
