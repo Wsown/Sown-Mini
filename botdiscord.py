@@ -390,6 +390,59 @@ async def stop(ctx):
         await ctx.send("👋 Bot đã dừng nhạc, xóa hàng đợi và rời phòng thoại!")
     else:
         await ctx.send("Bot đang không ở trong phòng thoại nào cả.")
+
+
+# ----------------- HỆ THỐNG MENU CHỌN GIỌNG AI (UI) -----------------
+class VoiceSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Nam - Miền Bắc", description="Giọng Lê Minh (Chuẩn VTV)", emoji="👦", value="nam_bac"),
+            discord.SelectOption(label="Nữ - Miền Bắc", description="Giọng Ban Mai (Trong trẻo)", emoji="👧", value="nu_bac"),
+            discord.SelectOption(label="Nam - Miền Trung", description="Giọng Nam (Trầm ấm)", emoji="👨", value="nam_trung"),
+            discord.SelectOption(label="Nữ - Miền Trung", description="Giọng Mỹ An (Nhẹ nhàng)", emoji="👩", value="nu_trung"),
+            discord.SelectOption(label="Nam - Miền Nam", description="Giọng Minh Quang (Nam tính)", emoji="👱‍♂️", value="nam_nambo"),
+            discord.SelectOption(label="Nữ - Miền Nam", description="Giọng Lan Nhi (Ngọt ngào)", emoji="👱‍♀️", value="nu_nambo"),
+        ]
+        super().__init__(placeholder="👆 Nhấp vào đây để chọn giọng đọc...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        # Lấy giá trị user vừa click
+        choice = self.values[0]
+        gender, region = choice.split('_')
+        
+        # Xử lý riêng cái tên cho miền nam
+        if region == "nambo": 
+            region = "nam_bo"
+
+        # Ghi nhớ vào file bộ nhớ của Bot
+        settings = load_voice_settings()
+        user_id = str(interaction.user.id)
+        
+        if user_id not in settings or not isinstance(settings[user_id], dict):
+            settings[user_id] = {}
+            
+        settings[user_id]['gender'] = gender
+        settings[user_id]['region'] = region
+        save_voice_settings(settings)
+
+        # Phản hồi bí mật (chỉ người bấm mới nhìn thấy chữ xác nhận)
+        region_name = "Miền Bắc" if region == 'bac' else ("Miền Trung" if region == 'trung' else "Miền Nam")
+        gender_name = "Nam" if gender == 'nam' else "Nữ"
+        
+        await interaction.response.send_message(f"✅ Đã lưu cấu hình! Từ giờ tôi sẽ đọc cho bạn bằng giọng: **{gender_name} - {region_name}**", ephemeral=True)
+
+class VoiceView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(VoiceSelect())
+
+# ----------------- LỆNH GỌI BẢNG CHỌN RA -----------------
+@bot.command()
+async def setvoice(ctx):
+    view = VoiceView()
+    await ctx.send("🎙️ **BẢNG CÀI ĐẶT GIỌNG ĐỌC AI CÁ NHÂN**\nHãy click vào menu thả xuống bên dưới để chọn giọng bạn thích nhé:", view=view)
+
+
 # ----------------- LỆNH ĐỌC VĂN BẢN (FPT.AI CAO CẤP) -----------------
 @bot.command()
 async def ngheanhbaonay(ctx, *, text: str):
@@ -438,54 +491,60 @@ async def ngheanhbaonay(ctx, *, text: str):
     gender_txt = "Nam" if gender == 'nam' else "Nữ"
     region_txt = "Miền Bắc" if region == 'bac' else ("Miền Trung" if region == 'trung' else "Miền Nam")
     
-    await ctx.send(f"🎙️ Đợi tí anh đổi giọng **{gender_txt} {region_txt}**...")
+    status_msg = await ctx.send(f"🎙️ Đợi tí anh đổi giọng **{gender_txt} {region_txt}**...")
 
     # 3. GỬI YÊU CẦU LÊN FPT.AI
     try:
-        payload = text.encode('utf-8')
-        headers = {
-            'api-key': FPT_API_KEY,
-            'voice': fpt_voice
-        }
+        loop = asyncio.get_event_loop()
         
-        async with aiohttp.ClientSession() as session:
-            async with session.post('https://api.fpt.ai/hmi/tts/v5', data=payload, headers=headers) as response:
-                res_data = await response.json()
+        def call_fpt_api():
+            url = 'https://api.fpt.ai/hmi/tts/v5'
+            headers = {
+                'api-key': FPT_API_KEY,
+                'voice': fpt_voice,
+                'speed': ''
+            }
+            response = requests.post(url, data=text.encode('utf-8'), headers=headers)
+            res_data = response.json()
+            
+            if res_data.get('error') == 0:
+                audio_url = res_data.get('async')
+                import time
+                speech_file = f"tts_{ctx.message.id}.mp3"
                 
-                if res_data.get('error') == 0:
-                    audio_url = res_data.get('async')
-                    
-                    # Chờ máy chủ FPT tạo xong file âm thanh (kiểm tra mỗi giây)
-                    speech_file = f"tts_{ctx.message.id}.mp3"
-                    file_ready = False
-                    
-                    for _ in range(15): # Chờ tối đa 15 giây
-                        await asyncio.sleep(1)
-                        async with session.get(audio_url) as audio_res:
-                            if audio_res.status == 200:
-                                audio_content = await audio_res.read()
-                                with open(speech_file, 'wb') as f:
-                                    f.write(audio_content)
-                                file_ready = True
-                                break
-                                
-                    if not file_ready:
-                        await ctx.send("❌ Lỗi app rồi, anh đã mất giọng")
-                        return
-                else:
-                    await ctx.send(f"❌ Lỗi từ FPT.AI: {res_data.get('message')}")
-                    return
+                for _ in range(15):
+                    time.sleep(1) 
+                    audio_res = requests.get(audio_url)
+                    if audio_res.status_code == 200:
+                        with open(speech_file, 'wb') as f:
+                            f.write(audio_res.content)
+                            
+                        if os.path.getsize(speech_file) > 1000:
+                            return speech_file
+                return "TIMEOUT"
+            else:
+                return f"ERROR:{res_data.get('message')}"
 
-        # 4. PHÁT FILE ÂM THANH
+        result = await loop.run_in_executor(None, call_fpt_api)
+
+        if result == "TIMEOUT":
+            await status_msg.edit(content="❌ Bọn FPT ngâm file lâu quá 15 giây, tui hủy lệnh rồi!")
+            return
+        elif result.startswith("ERROR:"):
+            await status_msg.edit(content=f"❌ Lỗi API từ FPT: {result}")
+            return
+            
+        speech_file = result
+
         if voice_client.is_playing():
             voice_client.stop()
 
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-        player = discord.FFmpegPCMAudio(speech_file, executable=ffmpeg_path)
+        player = discord.FFmpegPCMAudio(speech_file, executable=ffmpeg_path, stderr=sys.stderr)
 
         def cleanup_speech(error):
             if error:
-                print(f"🚨 Lỗi đọc TTS: {error}")
+                print(f"🚨 Lỗi phát âm thanh: {error}")
             try:
                 if os.path.exists(speech_file):
                     os.remove(speech_file)
@@ -493,7 +552,11 @@ async def ngheanhbaonay(ctx, *, text: str):
                 pass
 
         voice_client.play(player, after=cleanup_speech)
+        await status_msg.edit(content="▶️ Bot đang đọc văn bản của bạn trong kênh thoại rồi đó!")
+
     except Exception as e:
-        await ctx.send(f"❌ Lỗi cmmr: {e}")
+        await status_msg.edit(content=f"❌ Có lỗi mạng: {e}")
+
+# --- KHỞI ĐỘNG WEB SERVER VÀ BOT ---
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
