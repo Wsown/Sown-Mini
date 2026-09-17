@@ -13,6 +13,7 @@ import asyncio
 import imageio_ffmpeg
 import sys
 import glob
+import requests
 # --- CÀI ĐẶT WEB SERVER CHỐNG NGỦ ĐÔNG ---
 app = Flask(__name__)
 
