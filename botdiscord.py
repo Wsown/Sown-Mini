@@ -33,6 +33,10 @@ intents.members = True # Quyền nhận diện thành viên
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 FILE_NAME = 'birthdays.json'
+VOICE_FILE = 'voice_settings.json'
+
+# ĐIỀN CÁI MÃ API BẠN VỪA COPY TRÊN WEB FPT VÀO GIỮA 2 DẤU NGOẶC KÉP NÀY:
+FPT_API_KEY = "3wHXqEYr56WEJnPDN0ExQ1FS8ZndYoEe"
 
 def load_bdays():
     if os.path.exists(FILE_NAME):
@@ -376,5 +380,110 @@ async def stop(ctx):
         await ctx.send("👋 Bot đã dừng nhạc, xóa hàng đợi và rời phòng thoại!")
     else:
         await ctx.send("Bot đang không ở trong phòng thoại nào cả.")
+# ----------------- LỆNH ĐỌC VĂN BẢN (FPT.AI CAO CẤP) -----------------
+@bot.command()
+async def ngheanhbaonay(ctx, *, text: str):
+    if not ctx.author.voice:
+        await ctx.send("❌ Vào kênh thoại thì anh mới nói được chứ!")
+        return
+        
+    voice_channel = ctx.author.voice.channel
+    
+    try:
+        voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+        if not voice_client:
+            voice_client = await voice_channel.connect(timeout=10.0, reconnect=False)
+        elif voice_client.channel != voice_channel:
+            await voice_client.move_to(voice_channel)
+    except Exception as e:
+        await ctx.send(f"❌ Ô không, Anh mất kết lối: {e}")
+        return
+
+    if len(text) > 1200:
+        await ctx.send("❌ Dài vl, viết ngắn thôi dài quá anh đéo đọc đâu")
+        return
+
+    # 1. TRA CỨU CẤU HÌNH NGƯỜI DÙNG
+    settings = load_voice_settings()
+    user_pref = settings.get(str(ctx.author.id), {'gender': 'nam', 'region': 'bac'})
+    
+    gender = user_pref['gender']
+    region = user_pref['region']
+    
+    # 2. BẢN ĐỒ MAP VỚI CÁC GIỌNG ĐỌC CỦA FPT.AI
+    voice_map = {
+        'bac_nam': 'leminh',       # Lê Minh (Nam - Bắc)
+        'bac_nu': 'banmai',        # Ban Mai (Nữ - Bắc)
+        'nam_bo_nam': 'minhquang', # Minh Quang (Nam - Nam Bộ)
+        'nam_nam': 'minhquang',    
+        'nam_bo_nu': 'lannhi',     # Lan Nhi (Nữ - Nam Bộ)
+        'nam_nu': 'lannhi',        
+        'trung_nu': 'myan',        # Mỹ An (Nữ - Miền Trung)
+        'trung_nam': 'leminh'      # FPT hạn chế Nam Miền Trung ở bản miễn phí, lấy tạm Lê Minh
+    }
+    
+    dict_key = f"{region}_{gender}"
+    fpt_voice = voice_map.get(dict_key, 'banmai')
+    
+    gender_txt = "Nam" if gender == 'nam' else "Nữ"
+    region_txt = "Miền Bắc" if region == 'bac' else ("Miền Trung" if region == 'trung' else "Miền Nam")
+    
+    await ctx.send(f"🎙️ Đợi tí anh đổi giọng **{gender_txt} {region_txt}**...")
+
+    # 3. GỬI YÊU CẦU LÊN FPT.AI
+    try:
+        payload = text.encode('utf-8')
+        headers = {
+            'api-key': FPT_API_KEY,
+            'voice': fpt_voice
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post('https://api.fpt.ai/hmi/tts/v5', data=payload, headers=headers) as response:
+                res_data = await response.json()
+                
+                if res_data.get('error') == 0:
+                    audio_url = res_data.get('async')
+                    
+                    # Chờ máy chủ FPT tạo xong file âm thanh (kiểm tra mỗi giây)
+                    speech_file = f"tts_{ctx.message.id}.mp3"
+                    file_ready = False
+                    
+                    for _ in range(15): # Chờ tối đa 15 giây
+                        await asyncio.sleep(1)
+                        async with session.get(audio_url) as audio_res:
+                            if audio_res.status == 200:
+                                audio_content = await audio_res.read()
+                                with open(speech_file, 'wb') as f:
+                                    f.write(audio_content)
+                                file_ready = True
+                                break
+                                
+                    if not file_ready:
+                        await ctx.send("❌ Lỗi app rồi, anh đã mất giọng")
+                        return
+                else:
+                    await ctx.send(f"❌ Lỗi từ FPT.AI: {res_data.get('message')}")
+                    return
+
+        # 4. PHÁT FILE ÂM THANH
+        if voice_client.is_playing():
+            voice_client.stop()
+
+        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+        player = discord.FFmpegPCMAudio(speech_file, executable=ffmpeg_path)
+
+        def cleanup_speech(error):
+            if error:
+                print(f"🚨 Lỗi đọc TTS: {error}")
+            try:
+                if os.path.exists(speech_file):
+                    os.remove(speech_file)
+            except:
+                pass
+
+        voice_client.play(player, after=cleanup_speech)
+    except Exception as e:
+        await ctx.send(f"❌ Lỗi cmmr: {e}")
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
