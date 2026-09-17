@@ -36,6 +36,15 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 FILE_NAME = 'birthdays.json'
 VOICE_FILE = 'voice_settings.json'
 
+def load_voice_settings():
+    if os.path.exists(VOICE_FILE):
+        with open(VOICE_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_voice_settings(data):
+    with open(VOICE_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
 # ĐIỀN CÁI MÃ API BẠN VỪA COPY TRÊN WEB FPT VÀO GIỮA 2 DẤU NGOẶC KÉP NÀY:
 FPT_API_KEY = "3wHXqEYr56WEJnPDN0ExQ1FS8ZndYoEe"
 
