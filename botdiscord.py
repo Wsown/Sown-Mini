@@ -453,14 +453,19 @@ async def ngheanhbaonay(ctx, *, text: str):
 
     except Exception as e:
         await status_msg.edit(content=f"❌ Có lỗi khi tạo giọng Google: {e}")
-# ----------------- HỆ THỐNG TRA CỨU HỢP ÂM CHUẨN (BẢN PRO) -----------------
+# ----------------- HỆ THỐNG TRA CỨU HỢP ÂM CHUẨN (BẢN PRO V2 - CHỐNG LỖI 100 KÝ TỰ) -----------------
 class HopAmSelect(discord.ui.Select):
-    def __init__(self, options):
+    # Khai báo thêm danh sách urls để lưu trữ link bên ngoài Menu
+    def __init__(self, options, urls):
+        self.urls = urls
         super().__init__(placeholder="👆 Click vào đây để chọn bài hát...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_message("⏳ Đang chép lời và căn chỉnh hợp âm cho đẹp, chờ xíu nha...", ephemeral=False)
-        url = self.values[0]
+        
+        # Lấy số thứ tự (index) mà người dùng vừa click, rồi chiếu vào danh sách URL
+        index = int(self.values[0])
+        url = self.urls[index]
         
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -522,9 +527,9 @@ class HopAmSelect(discord.ui.Select):
             await interaction.followup.send(f"❌ Có lỗi khi tải bài: {e}")
 
 class HopAmView(discord.ui.View):
-    def __init__(self, select_options):
+    def __init__(self, select_options, urls):
         super().__init__(timeout=60)
-        self.add_item(HopAmSelect(select_options))
+        self.add_item(HopAmSelect(select_options, urls))
 
 @bot.command()
 async def hopam(ctx, *, query: str):
@@ -533,7 +538,6 @@ async def hopam(ctx, *, query: str):
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         
-        # CÁCH LY DOMAIN ĐỂ CHỐNG LỖI COPY MARKDOWN CỦA DISCORD/GITHUB
         mien_chinh = "hopamchuan"
         duoi_mien = "com"
         
@@ -573,10 +577,15 @@ async def hopam(ctx, *, query: str):
             return
             
         select_options = []
-        for res in results:
-            select_options.append(discord.SelectOption(label=res['title'], description=res['desc'], value=res['url'], emoji="🎸"))
+        urls_list = []
+        
+        for i, res in enumerate(results):
+            # LÁCH LUẬT DISCORD: Lưu index "0", "1", "2"... vào Menu thay vì link gốc (luôn dài < 100 ký tự)
+            select_options.append(discord.SelectOption(label=res['title'], description=res['desc'], value=str(i), emoji="🎸"))
+            # Nhét link thật vào một danh sách "sổ tay" riêng
+            urls_list.append(res['url'])
             
-        view = HopAmView(select_options)
+        view = HopAmView(select_options, urls_list)
         await msg.edit(content=f"🎶 Tìm thấy kết quả cho `{query}` rồi đây. Chọn 1 bài nhé:", view=view)
         
     except Exception as e:
