@@ -16,6 +16,7 @@ import glob
 import requests
 import urllib.parse
 from bs4 import BeautifulSoup
+import re
 # --- CÀI ĐẶT WEB SERVER CHỐNG NGỦ ĐÔNG ---
 app = Flask(__name__)
 
@@ -452,51 +453,79 @@ async def ngheanhbaonay(ctx, *, text: str):
 
     except Exception as e:
         await status_msg.edit(content=f"❌ Có lỗi khi tạo giọng Google: {e}")
-# ----------------- HỆ THỐNG TRA CỨU HỢP ÂM CHUẨN -----------------
+# ----------------- HỆ THỐNG TRA CỨU HỢP ÂM CHUẨN (BẢN PRO) -----------------
 class HopAmSelect(discord.ui.Select):
     def __init__(self, options):
         super().__init__(placeholder="👆 Click vào đây để chọn bài hát...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        # Báo cho Discord biết bot đang xử lý để không bị lỗi đơ mạng
-        await interaction.response.send_message("⏳ Đang chép lời và hợp âm, bạn chờ xíu nha...", ephemeral=False)
+        await interaction.response.send_message("⏳ Đang chép lời và căn chỉnh hợp âm cho đẹp, chờ xíu nha...", ephemeral=False)
         url = self.values[0]
         
         try:
-            # Đóng giả trình duyệt web để không bị hopamchuan chặn
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers) as response:
-                    html = await response.text()
+                    html_content = await response.text()
                     
-            # Dùng BeautifulSoup bóc tách ruột trang web
-            soup = BeautifulSoup(html, 'html.parser')
-            
-            # Tìm thẻ chứa lời bài hát (hopamchuan thường dùng thẻ div có id là song-lyric)
+            soup = BeautifulSoup(html_content, 'html.parser')
             lyric_element = soup.find('div', id='song-lyric')
             if not lyric_element:
                 lyric_element = soup.find('div', class_='lyric-content') or soup.find('pre')
                 
             if lyric_element:
-                # Đóng ngoặc vuông [ ] cho các hợp âm để dễ nhìn hơn trên Discord
-                for chord in lyric_element.find_all('span', class_='chord'):
-                    if chord.text and not chord.text.startswith('['):
-                        chord.string = f"[{chord.text.strip()}]"
-                        
-                text = lyric_element.text.strip()
+                # Phân tích HTML để nhấc hợp âm lên dòng trên
+                raw_html = str(lyric_element)
+                raw_html = re.sub(r'</?(div|p|br)[^>]*>', '\n', raw_html) # Ép xuống dòng chuẩn
+                lines = raw_html.split('\n')
                 
-                # Do Discord giới hạn 2000 ký tự mỗi tin nhắn, ta sẽ tự động cắt nhỏ nếu bài hát quá dài
+                final_output = []
+                for line in lines:
+                    if not line.strip():
+                        continue
+                        
+                    line_soup = BeautifulSoup(line, 'html.parser')
+                    chord_line = ""
+                    text_line = ""
+                    
+                    # Quét từng chữ và từng hợp âm trong 1 dòng
+                    for element in line_soup.contents:
+                        if element.name == 'span' and 'chord' in element.get('class', []):
+                            chord = element.text.strip()
+                            # Bơm dấu cách (space) vào dòng hợp âm cho tới khi nó dài bằng dòng chữ hiện tại
+                            while len(chord_line) < len(text_line):
+                                chord_line += " "
+                            chord_line += chord
+                        else:
+                            text = element.text if hasattr(element, 'text') else str(element)
+                            text_line += text
+                            
+                    import html
+                    text_line = html.unescape(text_line).replace('\r', '')
+                    
+                    # Gộp dòng hợp âm lên trên dòng chữ
+                    if chord_line.strip():
+                        final_output.append(chord_line)
+                    if text_line.strip():
+                        final_output.append(text_line)
+                    if not chord_line.strip() and not text_line.strip():
+                        final_output.append("")
+                        
+                text = "\n".join(final_output)
+                
+                # Cắt nhỏ tin nhắn nếu dài quá 2000 ký tự (Giới hạn của Discord)
                 chunks = [text[i:i+1900] for i in range(0, len(text), 1900)]
                 for i, chunk in enumerate(chunks):
                     if i == 0:
-                        await interaction.followup.send(f"🎸 **HỢP ÂM BÀI HÁT:**\n*(Nguồn: hopamchuan.com)*\n```text\n{chunk}\n```")
+                        # Dùng khung codeblock (```text) để khóa font chữ Monospace, giúp hợp âm và lời không bị xô lệch
+                        await interaction.followup.send(f"🎸 **HỢP ÂM BÀI HÁT:**\n```text\n{chunk}\n```")
                     else:
                         await interaction.followup.send(f"```text\n{chunk}\n```")
             else:
-                await interaction.followup.send("❌ Đã tìm thấy trang nhưng không trích xuất được lời bài hát.")
+                await interaction.followup.send("❌ Đã tìm thấy trang nhưng không bóc được lời bài hát.")
                 
         except Exception as e:
-            await interaction.followup.send(f"❌ Có lỗi xảy ra khi tải hợp âm: {e}")
+            await interaction.followup.send(f"❌ Có lỗi khi tải bài: {e}")
 
 class HopAmView(discord.ui.View):
     def __init__(self, select_options):
@@ -508,32 +537,39 @@ async def hopam(ctx, *, query: str):
     msg = await ctx.send(f"🔍 Đang lùng sục `{query}` trên hopamchuan.com...")
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        url = f"https://hopamchuan.com/search?q={urllib.parse.quote(query)}"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        url = f"[https://hopamchuan.com/search?q=](https://hopamchuan.com/search?q=){urllib.parse.quote(query)}"
         
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
-                html = await response.text()
+                html_content = await response.text()
                 
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html_content, 'html.parser')
         results = []
         
-        # Bới HTML để tìm các đường link dẫn tới bài hát
         for a in soup.find_all('a', href=True):
             href = a['href']
-            # Link bài hát hợp lệ luôn chứa chữ /song/
             if '/song/' in href and not href.endswith('/song/'):
                 title = a.text.strip()
-                # Lọc rác (bỏ qua tên trống hoặc các nút bấm vớ vẩn)
+                # Bỏ qua các kết quả rác
                 if title and len(title) > 2 and "Phiên bản" not in title and "Gửi" not in title:
+                    desc = "Nhấp để xem chi tiết"
+                    
+                    # Quét ngược ra ngoài HTML để tìm tên Ca Sĩ/Tác giả
+                    container = a.find_parent(['div', 'li'])
+                    if container:
+                        # Lấy tất cả các chữ trong khung kết quả (ngoại trừ tên bài hát)
+                        all_text = " | ".join([t.strip() for t in container.stripped_strings if t.strip() and t.strip() != title])
+                        if all_text:
+                            desc = all_text[:95]
+                    
                     if not href.startswith("http"):
-                        href = "https://hopamchuan.com" + href
+                        href = "[https://hopamchuan.com](https://hopamchuan.com)" + href
                         
-                    # Chống trùng lặp bài hát
+                    # Chống bài hát bị lặp nhiều lần
                     if not any(r['url'] == href for r in results):
-                        results.append({'title': title, 'url': href})
+                        results.append({'title': title[:95], 'url': href, 'desc': desc})
             
-            # Lấy tối đa 10 kết quả cho đẹp
             if len(results) >= 10:
                 break
                 
@@ -542,13 +578,11 @@ async def hopam(ctx, *, query: str):
             return
             
         select_options = []
-        for res in results[:10]:
-            # Đảm bảo tên không dài quá 100 ký tự (Discord sẽ chửi nếu menu dài quá)
-            title = res['title'][:95]
-            select_options.append(discord.SelectOption(label=title, description="Nhấp để xem", value=res['url'], emoji="🎸"))
+        for res in results:
+            select_options.append(discord.SelectOption(label=res['title'], description=res['desc'], value=res['url'], emoji="🎸"))
             
         view = HopAmView(select_options)
-        await msg.edit(content=f"🎶 Tui tìm thấy mấy kết quả này cho `{query}`, anh em chọn 1 bài bên dưới nhé:", view=view)
+        await msg.edit(content=f"🎶 Tìm thấy kết quả cho `{query}` rồi đây. Chọn 1 bài nhé:", view=view)
         
     except Exception as e:
         await msg.edit(content=f"❌ Lỗi mạng rồi: {e}")
