@@ -476,7 +476,7 @@ class HopAmSelect(discord.ui.Select):
             if lyric_element:
                 # Phân tích HTML để nhấc hợp âm lên dòng trên
                 raw_html = str(lyric_element)
-                raw_html = re.sub(r'</?(div|p|br)[^>]*>', '\n', raw_html) # Ép xuống dòng chuẩn
+                raw_html = re.sub(r'</?(div|p|br)[^>]*>', '\n', raw_html)
                 lines = raw_html.split('\n')
                 
                 final_output = []
@@ -488,11 +488,9 @@ class HopAmSelect(discord.ui.Select):
                     chord_line = ""
                     text_line = ""
                     
-                    # Quét từng chữ và từng hợp âm trong 1 dòng
                     for element in line_soup.contents:
                         if element.name == 'span' and 'chord' in element.get('class', []):
                             chord = element.text.strip()
-                            # Bơm dấu cách (space) vào dòng hợp âm cho tới khi nó dài bằng dòng chữ hiện tại
                             while len(chord_line) < len(text_line):
                                 chord_line += " "
                             chord_line += chord
@@ -503,7 +501,6 @@ class HopAmSelect(discord.ui.Select):
                     import html
                     text_line = html.unescape(text_line).replace('\r', '')
                     
-                    # Gộp dòng hợp âm lên trên dòng chữ
                     if chord_line.strip():
                         final_output.append(chord_line)
                     if text_line.strip():
@@ -513,11 +510,10 @@ class HopAmSelect(discord.ui.Select):
                         
                 text = "\n".join(final_output)
                 
-                # Cắt nhỏ tin nhắn nếu dài quá 2000 ký tự (Giới hạn của Discord)
+                # Bọc trong Codeblock (```text) để font chữ được gióng thẳng hàng 100%
                 chunks = [text[i:i+1900] for i in range(0, len(text), 1900)]
                 for i, chunk in enumerate(chunks):
                     if i == 0:
-                        # Dùng khung codeblock (```text) để khóa font chữ Monospace, giúp hợp âm và lời không bị xô lệch
                         await interaction.followup.send(f"🎸 **HỢP ÂM BÀI HÁT:**\n```text\n{chunk}\n```")
                     else:
                         await interaction.followup.send(f"```text\n{chunk}\n```")
@@ -538,7 +534,10 @@ async def hopam(ctx, *, query: str):
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        url = f"[https://hopamchuan.com/search?q=](https://hopamchuan.com/search?q=){urllib.parse.quote(query)}"
+        
+        # BẺ ĐÔI LINK RA ĐỂ CHỐNG DISCORD TỰ ĐỘNG CHÈN MARKDOWN GÂY LỖI
+        base_url = "https://" + "[hopamchuan.com/search?q=](https://hopamchuan.com/search?q=)"
+        url = base_url + urllib.parse.quote(query)
         
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
@@ -551,22 +550,19 @@ async def hopam(ctx, *, query: str):
             href = a['href']
             if '/song/' in href and not href.endswith('/song/'):
                 title = a.text.strip()
-                # Bỏ qua các kết quả rác
                 if title and len(title) > 2 and "Phiên bản" not in title and "Gửi" not in title:
                     desc = "Nhấp để xem chi tiết"
                     
-                    # Quét ngược ra ngoài HTML để tìm tên Ca Sĩ/Tác giả
                     container = a.find_parent(['div', 'li'])
                     if container:
-                        # Lấy tất cả các chữ trong khung kết quả (ngoại trừ tên bài hát)
                         all_text = " | ".join([t.strip() for t in container.stripped_strings if t.strip() and t.strip() != title])
                         if all_text:
                             desc = all_text[:95]
                     
                     if not href.startswith("http"):
-                        href = "[https://hopamchuan.com](https://hopamchuan.com)" + href
+                        # BẺ ĐÔI LINK
+                        href = "https://" + "hopamchuan.com" + href
                         
-                    # Chống bài hát bị lặp nhiều lần
                     if not any(r['url'] == href for r in results):
                         results.append({'title': title[:95], 'url': href, 'desc': desc})
             
