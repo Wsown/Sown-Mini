@@ -8,3 +8,4 @@ PyNaCl
 discord.py[voice]
 gTTS
 requests
+beautifulsoup4
