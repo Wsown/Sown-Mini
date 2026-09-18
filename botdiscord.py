@@ -474,7 +474,6 @@ class HopAmSelect(discord.ui.Select):
                 lyric_element = soup.find('div', class_='lyric-content') or soup.find('pre')
                 
             if lyric_element:
-                # Phân tích HTML để nhấc hợp âm lên dòng trên
                 raw_html = str(lyric_element)
                 raw_html = re.sub(r'</?(div|p|br)[^>]*>', '\n', raw_html)
                 lines = raw_html.split('\n')
@@ -510,7 +509,6 @@ class HopAmSelect(discord.ui.Select):
                         
                 text = "\n".join(final_output)
                 
-                # Bọc trong Codeblock (```text) để font chữ được gióng thẳng hàng 100%
                 chunks = [text[i:i+1900] for i in range(0, len(text), 1900)]
                 for i, chunk in enumerate(chunks):
                     if i == 0:
@@ -530,14 +528,16 @@ class HopAmView(discord.ui.View):
 
 @bot.command()
 async def hopam(ctx, *, query: str):
-    msg = await ctx.send(f"🔍 Đang lùng sục `{query}` trên hopamchuan.com...")
+    msg = await ctx.send(f"🔍 Đang lùng sục `{query}` trên trang hợp âm...")
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         
-        # BẺ ĐÔI LINK RA ĐỂ CHỐNG DISCORD TỰ ĐỘNG CHÈN MARKDOWN GÂY LỖI
-        base_url = "https://" + "[hopamchuan.com/search?q=](https://hopamchuan.com/search?q=)"
-        url = base_url + urllib.parse.quote(query)
+        # CÁCH LY DOMAIN ĐỂ CHỐNG LỖI COPY MARKDOWN CỦA DISCORD/GITHUB
+        mien_chinh = "hopamchuan"
+        duoi_mien = "com"
+        
+        url = f"https://{mien_chinh}.{duoi_mien}/search?q={urllib.parse.quote(query)}"
         
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
@@ -560,8 +560,7 @@ async def hopam(ctx, *, query: str):
                             desc = all_text[:95]
                     
                     if not href.startswith("http"):
-                        # BẺ ĐÔI LINK
-                        href = "https://" + "hopamchuan.com" + href
+                        href = f"https://{mien_chinh}.{duoi_mien}" + href
                         
                     if not any(r['url'] == href for r in results):
                         results.append({'title': title[:95], 'url': href, 'desc': desc})
@@ -570,7 +569,7 @@ async def hopam(ctx, *, query: str):
                 break
                 
         if not results:
-            await msg.edit(content=f"❌ Tìm nát hopamchuan.com rồi mà không thấy bài `{query}` nào!")
+            await msg.edit(content=f"❌ Tìm nát web rồi mà không thấy bài `{query}` nào!")
             return
             
         select_options = []
