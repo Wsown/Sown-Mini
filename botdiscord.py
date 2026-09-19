@@ -286,7 +286,7 @@ async def play_next(ctx):
 @bot.command()
 async def batnhacchoanh(ctx, *, query: str): 
     if not ctx.author.voice:
-        await ctx.send("❌ Bạn phải vào một kênh thoại trước đã!")
+        await ctx.send("❌ Vào kênh thoại đã thì anh mới phát được nhạc cho bé chứ")
         return
         
     voice_channel = ctx.author.voice.channel
@@ -298,10 +298,10 @@ async def batnhacchoanh(ctx, *, query: str):
         elif voice_client.channel != voice_channel:
             await voice_client.move_to(voice_channel)
     except Exception as e:
-        await ctx.send(f"❌ Không kết nối được kênh thoại: {e}")
+        await ctx.send(f"❌ Từ từ bé ơi, anh đang không vào được: {e}")
         return
 
-    await ctx.send(f"🔍 Đang tìm kiếm `{query}` trên SoundCloud...")
+    await ctx.send(f"🔍 Đợi tí a đang tìm `{query}` trên SoundCloud...")
 
     search_opts = {
         'format': 'bestaudio/best',
@@ -314,7 +314,7 @@ async def batnhacchoanh(ctx, *, query: str):
         data = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(search_opts).extract_info(f"scsearch5:{query}", download=False))
         
         if 'entries' not in data or not data['entries']:
-            await ctx.send("❌ Không tìm thấy bài nào trên SoundCloud!")
+            await ctx.send("❌ Ủa không có bài này bé ơi!")
             return
             
         entries = data['entries']
@@ -346,7 +346,7 @@ async def batnhacchoanh(ctx, *, query: str):
             return
             
     except Exception as e:
-        await ctx.send(f"❌ Có lỗi khi tìm kiếm: {e}")
+        await ctx.send(f"❌ Lỗi cmmr: {e}")
         return
 
     guild_id = ctx.guild.id
@@ -375,7 +375,7 @@ async def skip(ctx):
         voice_client.stop() # Dừng bài hiện tại, tự động chuyển sang bài kế tiếp
         await ctx.send("⏭️ Đã bỏ qua bài hiện tại!")
     else:
-        await ctx.send("❌ Hiện tại bot có đang phát bài nào đâu mà skip!")
+        await ctx.send("❌ Dmm có đang phát bài nào đâu mà skip!")
 
 
 # ----------------- LỆNH STOP (ĐUỔI BOT RA KHỎI PHÒNG) -----------------
@@ -390,9 +390,9 @@ async def stop(ctx):
         
     if voice_client and voice_client.is_connected():
         await voice_client.disconnect()
-        await ctx.send("👋 Bot đã dừng nhạc, xóa hàng đợi và rời phòng thoại!")
+        await ctx.send("👋 Anh đi đây, bai bai mấy cưng")
     else:
-        await ctx.send("Bot đang không ở trong phòng thoại nào cả.")
+        await ctx.send("anh ko có trong kênh nào đâu, nào nhớ thì cứ ới anh")
 
 
 # ----------------- LỆNH ĐỌC VĂN BẢN (GIỌNG GOOGLE CƠ BẢN - MIỄN PHÍ 100%) -----------------
@@ -418,7 +418,7 @@ async def ngheanhbaonay(ctx, *, text: str):
         await ctx.send("❌ Dài vl, viết ngắn thôi dài quá anh đéo đọc đâu")
         return
 
-    status_msg = await ctx.send("🎙️ Đang dịch giọng chị Google...")
+    status_msg = await ctx.send("🎙️ Đợi a đổi giọng sang chị gút gồ")
 
     try:
         # Chạy gTTS ở luồng ngầm để bot không bị đơ
@@ -441,7 +441,7 @@ async def ngheanhbaonay(ctx, *, text: str):
 
         def cleanup_speech(error):
             if error:
-                print(f"🚨 Lỗi phát âm thanh: {error}")
+                print(f"🚨 Lỗi rồi mấy cưng ơi: {error}")
             try:
                 if os.path.exists(speech_file):
                     os.remove(speech_file)
