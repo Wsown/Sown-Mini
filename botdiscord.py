@@ -598,12 +598,11 @@ if not os.path.exists(data_path):
     with open(data_path, 'w') as f:
         json.dump({}, f)
 
-# ... (các cấu hình bot của bạn) ...
-
-@client.event
+# SỬ DỤNG BIẾN bot THAY VÌ client
+@bot.event
 async def on_message(message):
     # Bỏ qua tin nhắn của chính bot
-    if message.author == client.user:
+    if message.author == bot.user:
         return
 
     # Lệnh !addsdt
@@ -642,13 +641,12 @@ async def on_message(message):
         phone = data.get(str(target_user.id))
         
         if phone:
-            # Trong Python, dùng f-string (chữ f đặt trước dấu ngoặc kép) để chèn biến vào chuỗi
             await message.reply(f"📞 Số điện thoại của **{target_user.name}** là: **{phone}**")
         else:
             await message.reply(f"❌ **{target_user.name}** chưa cập nhật số điện thoại.")
             
-    # Đảm bảo các lệnh khác (như !play của bạn) vẫn chạy được
-    await client.process_commands(message)
+    # Đảm bảo các lệnh khác (dùng @bot.command) vẫn chạy được
+    await bot.process_commands(message)
 # --- KHỞI ĐỘNG WEB SERVER VÀ BOT ---
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
