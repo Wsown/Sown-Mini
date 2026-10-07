@@ -590,6 +590,88 @@ async def hopam(ctx, *, query: str):
         
     except Exception as e:
         await msg.edit(content=f"❌ Lỗi mạng rồi: {e}")
+const { Client, GatewayIntentBits } = require('discord.js');
+const { DisTube } = require('distube');
+const { YtDlpPlugin } = require('@distube/yt-dlp');
+const fs = require('fs'); // Thêm thư viện fs để đọc/ghi file
+
+// Tạo file sdt.json nếu chưa tồn tại để lưu trữ dữ liệu
+const dataPath = './sdt.json';
+if (!fs.existsSync(dataPath)) {
+    fs.writeFileSync(dataPath, JSON.stringify({}));
+}
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.MessageContent
+    ]
+});
+
+// ... (Giữ nguyên phần khởi tạo DisTube và sự kiện 'ready' ở code cũ) ...
+
+client.on('messageCreate', message => {
+    if (message.author.bot || !message.inGuild()) return;
+
+    const args = message.content.split(' ');
+    const command = args[0].toLowerCase();
+
+    // 1. Lệnh phát nhạc (code cũ)
+    if (command === '!play') {
+        const url = args[1];
+        if (!url) return message.channel.send('Vui lòng dán một đường link YouTube!');
+        
+        const voiceChannel = message.member?.voice?.channel;
+        if (!voiceChannel) return message.channel.send('Bạn phải vào một kênh thoại trước!');
+
+        distube.play(voiceChannel, url, {
+            message,
+            textChannel: message.channel,
+            member: message.member,
+        });
+    }
+
+    // 2. Lệnh tự cập nhật số điện thoại: !addsdt <số>
+    if (command === '!addsdt') {
+        const phone = args[1];
+        if (!phone) return message.reply('Vui lòng nhập số điện thoại! VD: `!addsdt 0987654321`');
+
+        // Đọc dữ liệu từ file
+        const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+        
+        // Lưu số điện thoại theo ID của người dùng
+        data[message.author.id] = phone;
+        
+        // Ghi đè lại file
+        fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
+
+        return message.reply('✅ Đã cập nhật số điện thoại thành công!');
+    }
+
+    // 3. Lệnh xem số điện thoại: !sdt @member
+    if (command === '!sdt') {
+        // Lấy người được tag đầu tiên trong tin nhắn
+        const targetUser = message.mentions.users.first();
+
+        if (!targetUser) return message.reply('Vui lòng tag một người! VD: `!sdt @member`');
+
+        // Đọc dữ liệu từ file
+        const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+        
+        // Tìm số điện thoại dựa trên ID của người được tag
+        const phone = data[targetUser.id];
+
+        if (phone) {
+            return message.reply(`📞 Số điện thoại của **${targetUser.username}** là: **${phone}**`);
+        } else {
+            return message.reply(`❌ **${targetUser.username}** chưa cập nhật số điện thoại.`);
+        }
+    }
+});
+
+// ... (Giữ nguyên phần distube.on và client.login ở code cũ) ...
 # --- KHỞI ĐỘNG WEB SERVER VÀ BOT ---
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
